@@ -1,4 +1,5 @@
 const fs = require("fs");
+const fsp = require('fs/promises');
 const path = require("path");
  
 const projectFolderName = "project-dist";
@@ -16,97 +17,88 @@ const pathProjectFolder = path.join(pathBase, projectFolderName);
 const pathTemplate = path.join(pathBase, templateName);
 const pathComponentsFolder = path.join(pathBase, folderNameComponents);
 const pathStylesFolder = path.join(pathBase, folderNameStyles);
-const pathAssetsFolder = path.join(pathBase, folderNameAssets);
+const pathAssetsSource = path.join(pathBase, folderNameAssets);
 
 const pathIndexFile = path.join(pathProjectFolder, outputMarkdownName);
 const pathStyleFile = path.join(pathProjectFolder, outputStyleName);
-const pathAssetsDir = path.join(pathProjectFolder, folderNameAssets);
+const pathAssetsDestination = path.join(pathProjectFolder, folderNameAssets);
 
-fs.mkdir(pathProjectFolder, { recursive: true }, (err) => {
-  if (err) throw err;
-});
-
-// create index.html
-fs.readFile(pathTemplate, "utf-8", (err, templateData) => {
-  if (err) throw err;
-  let templateContent = templateData;
- 
-  fs.readdir(pathComponentsFolder, function (err, files) {
-    if (err) throw err;
-    files.forEach((elm) => {
-      const itemExtention = path.extname(elm);
-      const itemName = elm.split(".")[0];
-      if (itemExtention === ".html") {
-        const pathItem = path.join(pathComponentsFolder, elm);
- 
-        fs.readFile(pathItem, "utf-8", (err, data) => {
-          if (err) throw err;
-          templateContent = templateContent.replace(`{{${itemName}}}`, data);
-          fs.writeFile(pathIndexFile, templateContent, (err) => {
-            if (err) throw err;
-          });
-        });
-      }
-    });
-  });
-});
-
-// create styles
-fs.open(pathStyleFile, 'w', function (err) {
-  if (err) throw err;
-});
-
-fs.readdir(pathStylesFolder, function (err, files) {
-  if(err) throw err;
-  files.forEach((elm) => {
-    const itemExtention = path.extname(elm);
-    if (itemExtention === '.css') {
-      const pathItem = path.join(pathStylesFolder, elm);
-
-      fs.readFile(pathItem, 'utf-8', (err, data) => {
-        if (err) throw err;
-        fs.appendFile(pathStyleFile, data + '\n', (err) => {
-          if (err) throw err;
-        });
-      });
-    }
-  });
-});
-
-// assets
-function copyAssets(dirOrigin, dirCopy) {
-  fs.readdir(dirOrigin, {withFileTypes: true}, (err, files) => {
-    if(err) throw err;
-    files.forEach((file) => {
-      if(!file.isFile()) {
-        fs.stat(path.join(dirCopy, file.name), err => {
-          if(err) {
-            fs.mkdir(path.join(dirCopy, file.name), err => {
-              if(err) throw err;
-            });
-            copyAssets(path.join(dirOrigin, file.name), path.join(dirCopy, file.name));
-          } else {
-            copyAssets(path.join(dirOrigin, file.name), path.join(dirCopy, file.name));
-          }
-        });
-      } else {
-        fs.copyFile(path.join(dirOrigin, file.name), path.join(dirCopy, file.name), err =>{
-          if(err) throw err;
-        });
-      }
-    });
-  });
+async function createProjectDir (pathToDir) {
+  await fsp.rmdir(pathToDir, { recursive: true });
+  await fsp.mkdir(pathToDir, { recursive: true });
 }
 
-copyAssets(pathAssetsFolder, pathAssetsDir);
+// create index.html
+async function createHtml(pathHtml, pathTemplate, pathComponent) {
+  let templateContent = await fsp.readFile(pathTemplate, 'utf-8');
+  const listComponents = await fsp.readdir(pathComponent);
+  
+  for (let id = 0; id < listComponents.length; id++) {
+    const item = listComponents[id];
+    const itemExtention = path.extname(item);
+    const itemPath = path.join(pathComponent, item);
+    const itemName = item.split(".")[0];
+    const itemContent = await fsp.readFile(itemPath, 'utf-8');
 
-fs.stat(path.join(pathAssetsDir), err => {
-  if(err) {
-    fs.mkdir(pathAssetsDir, err => {
-      if(err) throw err;
-    });
-    copyAssets(pathAssetsFolder, pathAssetsDir);
-  } else {
-    copyAssets(pathAssetsFolder, pathAssetsDir);
+    if (itemExtention === '.html') {
+      templateContent = templateContent.replace(`{{${itemName}}}`, itemContent);
+    }
   }
-});
+  
+  await fsp.open(pathHtml, 'w');
+  fsp.appendFile(pathHtml, templateContent);
+}
+
+// Create style.css
+async function mergeStyles(source, destination) {
+  await fsp.open(destination, 'w');
+  const listFiles = await fsp.readdir(source);
+
+  for (let id = 0; id < listFiles.length; id++) {
+    const item = listFiles[id];
+    const itemExtention = path.extname(item);
+    const itemPath = path.join(source, item);
+    
+    if (itemExtention === '.css') {
+      const itemContent = await fsp.readFile(itemPath, 'utf-8');
+      await fsp.appendFile(destination, itemContent + '\n');
+    }
+  }
+}
+
+// Copy assets folder 
+async function copyDir(source, destination) {
+  await fsp.rmdir(destination, { recursive: true });
+  await fsp.mkdir(destination, { recursive: true });
+  const listFiles = await fsp.readdir(source);
+
+  for (let id = 0; id < listFiles.length; id++) {
+    const item = listFiles[id];
+    const itemSourcePath = path.join(source, item);
+    const itemDestinationPath = path.join(destination, item);
+    await fsp.copyFile(itemSourcePath, itemDestinationPath);
+  }
+}
+
+async function copyAssets(source, destination) {
+  await fsp.rmdir(destination, { recursive: true });
+  await fsp.mkdir(destination, { recursive: true });
+  const listFolders = await fsp.readdir(source);
+
+  for (let id = 0; id < listFolders.length; id++) {
+    const folder = listFolders[id];
+    const folderSourcePath = path.join(source, folder);
+    const folderDestinationPath = path.join(destination, folder);
+    copyDir(folderSourcePath, folderDestinationPath);
+  }
+}
+
+// Run main function
+async function main() {
+  await createProjectDir(pathProjectFolder);
+  createHtml(pathIndexFile, pathTemplate, pathComponentsFolder);
+  mergeStyles(pathStylesFolder, pathStyleFile);
+  copyAssets(pathAssetsSource, pathAssetsDestination); 
+}
+
+main();
