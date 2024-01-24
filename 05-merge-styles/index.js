@@ -1,33 +1,29 @@
 const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 
 const folderNameWrite = 'project-dist';
 const folderNameRead = 'styles';
-const outputFileName = 'bundle.css'
+const outputFileName = 'bundle.css';
 const pathBase = __dirname;
 const pathToWrite = path.join(pathBase, folderNameWrite);
 const pathToRead = path.join(pathBase, folderNameRead);
 const pathOutputFile = path.join(pathToWrite, outputFileName);
 
-fs.open(pathOutputFile, 'w', function (err) {
-  if (err) throw err;
-});
+async function mergeFiles(source, destination) {
+  await fsp.open(pathOutputFile, 'w');
+  const listFiles = await fsp.readdir(source);
 
-fs.readdir(pathToRead, function (err, files) {
-  console.log('pathBase -', pathBase);
-  console.log('pathToRead -', pathToRead);
-  if(err) throw err;
-  files.forEach((elm) => {
-    const itemExtention = path.extname(elm);
+  for (let id = 0; id < listFiles.length; id++) {
+    const item = listFiles[id];
+    const itemExtention = path.extname(item);
+    const itemPath = path.join(source, item);
+    
     if (itemExtention === '.css') {
-      const pathItem = path.join(pathToRead, elm);
-
-      fs.readFile(pathItem, 'utf-8', (err, data) => {
-        if (err) throw err;
-        fs.appendFile(pathOutputFile, data + '\n', (err) => {
-          if (err) throw err;
-        });
-      });
+      const itemContent = await fsp.readFile(itemPath, 'utf-8');
+      await fsp.appendFile(destination, itemContent + '\n');
     }
-  });
-});
+  }
+}
+
+mergeFiles(pathToRead, pathOutputFile);
