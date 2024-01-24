@@ -13,7 +13,9 @@ fs.open(pathOutputFile, 'w', function (err) {
   if (err) throw err;
 });
 
-fs.readdir(folderNameRead, function (err, files) {
+fs.readdir(pathToRead, function (err, files) {
+  console.log('pathBase -', pathBase);
+  console.log('pathToRead -', pathToRead);
   if(err) throw err;
   files.forEach((elm) => {
     const itemExtention = path.extname(elm);
